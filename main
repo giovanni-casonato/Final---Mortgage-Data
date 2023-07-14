@@ -1,0 +1,221 @@
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Read the Excel file into a Dataset
+data <- read_xlsx("C:/Users/giovanni.casonato/Desktop/R Projects/CLTV_DTI_Race_by_City/Data.xlsx")
+
+# Separate the data into 2 time periods
+data$Year <- format(data$Year, "%Y")
+data$Time_Period <- ifelse(data$Year %in% 2013:2017, "2013-2017", "2018-2023")
+
+
+          ######################## CLTV ############################
+
+#Categorize LTV
+data$CLTV <- as.numeric(data$CLTV)
+data$CLTV_Category <- cut(data$CLTV,
+                          breaks = c(0, 49, 64, 79, 90, Inf),
+                          labels = c("<50", "50-65", "64-79", "80-90", ">90"),
+                          right = FALSE)
+
+# Group the data by CLTV_Category and Year and calculate the count
+cltv_data <- data %>% 
+  group_by(CLTV_Category, Time_Period) %>% 
+  summarise(Count = n())
+
+# Calculate percentage change from the previous 5-year period
+cltv_data <- cltv_data %>%
+  arrange(Time_Period) %>%
+  mutate(Percent_Change = (Count - lag(Count))/lag(Count) * 100)
+
+# Filter the data for the "2018-2023" period
+filtered_data <- cltv_data %>% filter(Time_Period == "2018-2023")
+
+# Set vjust values for label positioning
+vjust_values <- ifelse(filtered_data$CLTV_Category == "Specific_Category", -1.5, -0.5)
+
+# Create a bar plot
+ggplot(filtered_data, aes(x = CLTV_Category, y = Percent_Change, fill = ifelse(Percent_Change >= 0, "Positive", "Negative"))) +
+  geom_col() +
+  geom_text(aes(label = paste0(round(Percent_Change, 2), "%")),
+            position = position_dodge(width = 1),
+            vjust = vjust_values) +
+  labs(title = "Percentage Change in CLTV from Previous 5-Year Period",
+       x = "CLTV Category",
+       y = "Percentage Change") +
+  scale_fill_manual(values = c("Positive" = "green", "Negative" = "red")) +
+  guides(fill = FALSE) +
+  theme_minimal()
+
+
+# Create a bar plot for "2013-2017" period
+ggplot(cltv_data %>% filter(Time_Period == "2013-2017"),
+       aes(x = CLTV_Category, y = Count, fill = CLTV_Category)) +
+  geom_col() +
+  geom_text(aes(label = Count), position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "CLTV for 2013-2017", x = "CLTV Category", y = "Number of Closed Loans") +
+  scale_fill_manual(values = c("#0081A7", "#00AFB9", "#FDFCDC", "#FED9B7", "#F07167"))
+
+
+# Create a bar plot for "2018-2023" period
+ggplot(cltv_data %>% filter(Time_Period == "2018-2023"),
+       aes(x = CLTV_Category, y = Count, fill = CLTV_Category)) +
+  geom_col() +
+  geom_text(aes(label = Count), position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "CLTV for 2018-2023", x = "CLTV Category", y = "Number of Closed Loans") +
+  scale_fill_manual(values = c("#0081A7", "#00AFB9", "#FDFCDC", "#FED9B7", "#F07167"))
+
+
+                    ##################### AGE #########################
+
+# Categorize the ages into six categories
+data$Age_Category <- cut(data$Age,
+                         breaks = c(0, 25, 35, 45, 55, 65, Inf),
+                         labels = c("<25", "26-35", "36-45", "46-55", "56-65", ">66"),
+                         right = FALSE)
+
+# Group the data by Age_Category and Year and calculate the count
+age_data <- data %>% 
+  group_by(Age_Category, Time_Period) %>% 
+  summarise(Count = n())
+
+# Create a double bar chart with columns for 2013-2017 and 2018-2023
+ggplot(age_data, aes(x = Age_Category, y = Count, fill = Time_Period)) +
+  geom_col(position = position_dodge()) +
+  geom_text(aes(label = Count), position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "Age Category", x = "Age Category", y = "Count")  +
+  scale_fill_manual(values = c("#C33C54", "#254E70"))
+
+
+              ################### INCOME #######################
+# Convert the "Monthly Income (Borr/Co-Borr)" column to numeric
+data$`Borrower Annual Income` <- as.numeric(data$`Borrower Annual Income`)
+
+# Categorize the monthly income into categories with $25,000 intervals, handling NA values
+data$Income_Category <- cut(data$`Borrower Annual Income`,
+                            breaks = c(0, 25000, 50000, 75000, 100000, 125000,
+                                       150000, 175000, 200000, 225000, 500000, Inf),
+                            labels = c("<25",
+                                       "25 - 50",
+                                       "50 - 75",
+                                       "75 - 100",
+                                       "100 - 125",
+                                       "125 - 150",
+                                       "150 - 175",
+                                       "175 - 200",
+                                       "200 - 225",
+                                       "225 - 500",
+                                       ">500"),
+                            right = FALSE,
+                            na.rm = TRUE)
+
+income_data <- data %>%
+  filter(!is.na(`Borrower Annual Income`))  %>%
+  group_by(Income_Category, Time_Period) %>%
+  summarise(Count = n())
+
+ggplot(income_data, aes(x = Income_Category, y = Count, fill = Time_Period)) +
+  geom_col(position = position_dodge()) +
+  geom_text(aes(label = Count), position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "Annual Income in Thousands", x = "Annual Income", y = "Number of Loans")  +
+  scale_fill_manual(values = c("#80FF72", "#FFF07C"))
+
+                    ################### RACE #######################
+race_data <- data %>%
+  filter(!is.na(`Race`))  %>%
+  group_by(`Race`, Time_Period) %>%
+  summarise(Count = n())
+
+# Calculate the total count for each time period
+race_totals <- race_data %>%
+  group_by(Time_Period) %>%
+  summarise(Total_Count = sum(Count))
+
+# Calculate the percentage of each race by dividing the count by the total count
+race_data <- race_data %>%
+  left_join(race_totals, by = "Time_Period") %>%
+  mutate(Percentage = (Count / Total_Count) * 100)
+
+
+hispanic_data <- data %>%
+  filter(!is.na(`Borr Ethnicity`)) %>%
+  group_by(`Borr Ethnicity`, Time_Period) %>%
+  summarise(Count = n())
+
+hispanic_totals <- hispanic_data %>%
+  group_by(Time_Period) %>%
+  summarise(Total_Count = sum(Count))
+
+# Calculate the percentage of each race by dividing the count by the total count
+hispanic_data <- hispanic_data %>%
+  left_join(hispanic_totals, by = "Time_Period") %>%
+  mutate(Percentage = (Count / Total_Count) * 100)
+
+
+# Combine the data from hispanic_data and race_data
+combined_data <- bind_rows(
+  mutate(hispanic_data, Category = "Hispanic"),
+  mutate(race_data, Category = "Race")
+)
+
+# Filter the data for the 2013-2017 period
+filtered_data_1 <- combined_data %>%
+  filter(Time_Period == "2013-2017")
+
+ggplot(filtered_data_1, aes(x = ifelse(Category == "Hispanic", `Borr Ethnicity`, Race),
+                          y = Percentage, fill = Time_Period)) +
+  geom_col(position = position_dodge()) +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "Borrower Hispanic and Race (2013-2017)", x = "Category", y = "%") +
+  scale_fill_manual(values = c("#FAFF81")) +
+  theme(legend.title = element_blank()) +
+  facet_grid(Category ~ .)
+
+
+# Filter the data for the 2018-2023 period
+filtered_data_2 <- combined_data %>%
+  filter(Time_Period == "2018-2023")
+
+ggplot(filtered_data_2, aes(x = ifelse(Category == "Hispanic", `Borr Ethnicity`, Race),
+                          y = Percentage, fill = Time_Period)) +
+  geom_col(position = position_dodge()) +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_dodge(width = 0.9), vjust = -0.5) +
+  labs(title = "Borrower Hispanic and Race (2018-2023)", x = "Category", y = "%") +
+  scale_fill_manual(values = c("#5DB7DE")) +
+  theme(legend.title = element_blank()) +
+  facet_grid(Category ~ .)
+
+          ############### Monthly Average Mortgage Amount ###################
+# Extract year and month from the 'Month' column
+data$Month <- as.Date(cut(data$Month, "month"))
+data <- data %>%
+  arrange(Month)
+
+# Group the data by month
+grouped_monthly <- data %>%
+  group_by(Month) %>%
+  summarize(avg_loan_amount = mean(`Total Loan Amount`))
+
+# Plotting the grouped dataframe with professional style
+ggplot(grouped_monthly, aes(x = Month, y = avg_loan_amount)) +
+  geom_line(color = "#0072B2", size = 1, linetype = "solid") +
+  scale_y_continuous(labels = scales::comma, limits = c(250000, 850000),
+                     expand = c(0, 0), breaks = seq(250000, 850000, by = 100000)) +
+  labs(x = "Month", y = "Average Loan Amount") +
+  ggtitle("Average Loan Amount by Month - Last 10 Years") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    axis.line = element_line(size = 0.5, color = "black"),
+    panel.grid.major = element_line(color = "#DDDDDD"),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#F5F5F5"),
+    plot.margin = margin(20, 20, 20, 20)
+  )
+
